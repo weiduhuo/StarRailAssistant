@@ -265,6 +265,7 @@ LOADOUT_SCHEMA = {
                     "maxItems": 6,
                     "items": {"type": "string"}  # [外键]遗器哈希值                
                 },
+                "visible": {"type": "boolean"},  # 是否可见 (变相可恢复性删除)
                 # 【待扩展】如裸装面板、遗器属性权重
             },
             "required": ["relic_hash"],
@@ -296,7 +297,8 @@ TEAM_SCHEMA_PART = {
                 "minProperties": 1,
                 "maxProperties": 4
             },
-            # 【可扩展】如"visible","ordered"等其他队伍属性
+            "visible": {"type": "boolean"},  # 是否可见 (变相可恢复性删除)
+            # 【可扩展】如"ordered"等其他队伍属性
         },
         "required": ["team_members"],  # 需包含遗器的全部固有属性
         "additionalProperties": False
