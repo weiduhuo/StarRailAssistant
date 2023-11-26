@@ -98,6 +98,8 @@ class Relic:
         """在打印面板信息时开启条件效果"""
         self.loadout_detail_type: Literal[0, 1] = 0
         """配装详情的类别：0-面板详情，1-遗器详情"""
+        self.show_hidden_data = False
+        """是否显示隐藏的配装与队伍数据"""
         self.msg_style = Style([
             ("highlighted", "fg:#FF9D00 bold"),    # 在select中对选中的项进行高亮
             ("bold", "bold"),
@@ -450,7 +452,7 @@ class Relic:
                         return    # 配装修改成功
                     else:
                         continue  # 配装修改失败，给予机会重新修改
-                # 替换遗器
+                # 编辑遗器
                 equip_index, key_hash = option_2
                 new_hash = interface_3(key_hash, equip_index)
                 if new_hash:
@@ -1813,7 +1815,7 @@ class Relic:
                 description = "".join(
                         prefix + str_just(char_name, 10) + " " + self.get_loadout_brief(self.loadout_data[char_name][loadout_name]["relic_hash"]) 
                     for char_name, loadout_name in team_data["team_members"].items())
-            ) for team_name, team_data in group_data]
+            ) for team_name, team_data in group_data if self.is_visible(team_data) or self.show_hidden_data]
         return choice_options
 
     def get_loadout_options(self, character_name: str) -> List[Choice]:
@@ -1834,8 +1836,15 @@ class Relic:
                 title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]), 
                 value = (loadout_name, loadout_data["relic_hash"]),
                 description = self.get_loadout_detail(loadout_data["relic_hash"], character_name, 5)
-            ) for loadout_name, loadout_data in character_data]
+            ) for loadout_name, loadout_data in character_data if self.is_visible(loadout_data) or self.show_hidden_data]
         return choice_options
+
+    def is_visible(self, loadout_data: Dict[str, Any]) -> bool:
+        """
+        说明：
+            判断数据是否可见 (可兼容配装数据与队伍数据，无标识默认为可见)
+        """
+        return loadout_data.get("visible", True)
 
     def get_loadout_detail(self, relics_hash: List[str], character_name: Optional[str]=None, indent_num: int=0) -> StyledText:
         """
