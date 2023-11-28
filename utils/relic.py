@@ -71,18 +71,19 @@ class StatsWeight:
 
 class Relic:
 
-    def __init__(self, title=_("崩坏：星穹铁道")):
+    def __init__(self, title=_("崩坏：星穹铁道"), start_cal=True):
         """
         说明：
             初始化，载入遗器数据并校验
         """
         if sra_config_obj.language != "zh_CN":
             raise Exception(_("暂不支持简体中文之外的语言"))
-        self.calculated = calculated(title, rec_root="model/cnocr_for_relic")
-        log.info(_("命令行窗口：'{}'").format(self.calculated.cmd.title))
-        if self.calculated.cmd.title == title:
-            log.error(_("获取命令行窗口名称时，请勿点击游戏窗口"))   # 排除常见错误
-            raise Exception(_("命令行窗口获取失败"))
+        if start_cal:
+            self.calculated = calculated(title, rec_root="model/cnocr_for_relic")
+            log.info(_("命令行窗口：'{}'").format(self.calculated.cmd.title))
+            if self.calculated.cmd.title == title:
+                log.error(_("获取命令行窗口名称时，请勿点击游戏窗口"))   # 排除常见错误
+                raise Exception(_("命令行窗口获取失败"))
 
         self.is_fuzzy_match = sra_config_obj.fuzzy_match_for_relic
         """是否在遗器搜索时开启模糊匹配"""
