@@ -396,13 +396,14 @@ class Relic:
                 return tmp_hash
             else:
                 return None
-        def interface_2(old_loadout_data: Dict[str, Union[List[str], bool]]) -> Optional[int]:
+        def interface_2(old_loadout_data: Dict[str, Union[List[str], bool]]) -> Optional[str]:
             """
             说明：
                 第[2]层级，配装内部选项
+            返回：
+                :return loadout_name: 新的配装名称或空
             """
             option_2 = None
-            option_1_idx = default_1_idx
             old_relics_hash: List[str] = old_loadout_data["relic_hash"]
             new_relics_hash = old_relics_hash.copy()
             visible = self.is_visible(old_loadout_data)
@@ -443,18 +444,18 @@ class Relic:
                 character_data = self.loadout_data[character_name]
                 # 处理特殊选择
                 if option_2 == _("<取消>"):
-                    return option_1_idx
+                    return loadout_name
                 elif option_2 in [_("<<隐藏配装>>"), _("<<取消隐藏配装>>")]:
                     old_loadout_data["visible"] = not visible
                     rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
                     if option_2 == _("<<隐藏配装>>") and not self.show_hidden_data:
-                        option_1_idx = None
-                    return option_1_idx
+                        return None
+                    return loadout_name
                 elif option_2 == _("<完成并新建配装>"):
                     new_loadout_name = questionary.text(_("命名配装名称:"), validate=ConflictValidator(character_data.keys())).ask()
                     self.loadout_data[character_name][new_loadout_name] = {"relic_hash": new_relics_hash}
                     rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
-                    return self.get_loadout_index(character_name, new_loadout_name)
+                    return new_loadout_name
                 elif option_2 == _("<完成并更新配装 (可进行重命名)>"):
                     new_loadout_name = loadout_name
                     if questionary.confirm(_("是否更改配装名称"), default=False).ask():
@@ -464,7 +465,7 @@ class Relic:
                     # 尝试进行配装修改
                     ret = self.updata_loadout_data(character_name, loadout_name, new_loadout_name, new_loadout_data)
                     if ret:    # 配装修改成功
-                        return self.get_loadout_index(character_name, new_loadout_name)
+                        return new_loadout_name
                     else:
                         continue  # 配装修改失败，给予机会重新修改
                 # 编辑遗器
@@ -497,8 +498,9 @@ class Relic:
                 option_1 = self.ask_loadout_options(character_name, default_idx=default_1_idx, title=_("请选择要编辑的配装:"))
                 if option_1 == _("<返回上一级>") or not isinstance(option_1, tuple):
                     break
-                loadout_name, loadout_data, default_1_idx = option_1
-                default_1_idx = interface_2(loadout_data)
+                loadout_name, loadout_data = option_1
+                loadout_name = interface_2(loadout_data)
+                default_1_idx = self.get_loadout_index(character_name, loadout_name)
 
     def edit_character_weight(self, tmp=False) -> Optional[StatsWeight]:
         """
@@ -747,7 +749,7 @@ class Relic:
         option = self.ask_loadout_options(character_name, title=_("请选择要装备的配装:"))
         if option == _("<返回上一级>") or not isinstance(option, tuple):
             return
-        loadout_name, loadout_data, __ = option
+        loadout_name, loadout_data = option
         self.calculated.switch_window()
         # 进行配装
         self.calculated.relative_click((12,40) if IS_PC else (16,48))  # 点击遗器，进入[角色]-[遗器]界面
@@ -874,7 +876,7 @@ class Relic:
                 if option == _("<退出>"):   # 退出本次编队
                     return
                 elif isinstance(option, tuple):
-                    loadout_name, loadout_data, __ = option    # 获取已录入的配装数据
+                    loadout_name, loadout_data = option    # 获取已录入的配装数据
                     relics_hash: List[str] = loadout_data["relic_hash"]
                 elif option == _("<识别当前配装>"):
                     self.calculated.switch_window()
@@ -1726,7 +1728,7 @@ class Relic:
         add_options: Optional[List[Choice]] = [Choice(_("<返回上一级>"), shortcut_key='z')],
         default_idx: Optional[int] = None,
         title: str = _("请选择配装:"),
-    ) -> Union[Tuple[str, Dict[str, Union[List[str], bool]], int], str]:
+    ) -> Union[Tuple[str, Dict[str, Union[List[str], bool]]], str]:
         """
         说明：
             询问并获得该角色配装的选择
@@ -1736,7 +1738,7 @@ class Relic:
             :param default: 默认选项的序列号
             :param title: 标题
         返回：
-            :return option: 元组(配装名称, 配装数据, 序列号) 或 附加选项名称
+            :return option: 元组(配装名称, 配装数据) 或 附加选项名称
                 loadout_data = {
                     "relic_hash": List[relic_hash:str],   # 必有
                     "visible": bool,   # 可有
@@ -1806,27 +1808,29 @@ class Relic:
             :param character_name: 人物名称
         返回：
             :return choice_options: 人物配装记录的选项表，Choice构造参数如下：
-                :return title: 配装名称+配装简要信息,
-                :return value: 元组(配装名称, 配装数据, 序列号),
+                :return title: 配装名称+配装简要信息
+                :return value: 元组(配装名称, 配装数据)
                 :return description: 配装各属性数值统计
         """
         character_data = self.loadout_data[character_name]
         character_data = sorted(character_data.items())      # 按键名即配装名排序
         character_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, character_data)
         choice_options = []
-        for idx, (loadout_name, loadout_data) in enumerate(character_data):
+        for loadout_name, loadout_data in character_data:
             choice_options.append(Choice(
                 title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]), 
-                value = (loadout_name, loadout_data, idx),
+                value = (loadout_name, loadout_data),
                 description = self.get_loadout_detail(loadout_data["relic_hash"], character_name, 5)
             ))
         return choice_options
 
-    def get_loadout_index(self, character_name: str, key_name: str) -> Optional[int]:
+    def get_loadout_index(self, character_name: str, key_name: Optional[str]=None) -> Optional[int]:
         """
         说明：
             获取配装记录在有序序列中的序列号
         """
+        if key_name is None:
+            return None
         character_data = self.loadout_data[character_name]
         character_data = sorted(character_data.items())      # 按键名即配装名排序
         character_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, character_data)
