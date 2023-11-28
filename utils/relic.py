@@ -1197,88 +1197,6 @@ class Relic:
                 key != _("速度") and old_data["subs_stats"][key] > new_data["subs_stats"][key]:
                 return False        # 考虑手动提高速度数据精度的情况
         return True
-    
-    def find_char_weight(self, char_name:str) -> Tuple[Optional[str], StatsWeight]:
-        """
-            通过角色名查询属性权重
-        """
-        char_weight = StatsWeight()
-        char_weight_name = None
-        if char_name in self.char_weight_data:
-            char_weights = self.char_weight_data[char_name]
-            if len(char_weights) > 0:
-                # 默认载入首个
-                char_weight = StatsWeight(list(char_weights.values())[0]["weight"])
-                char_weight_name =  "{}_{}".format(char_name, list(char_weights.keys())[0])
-                ... # 【待扩展】处理多组权重
-        return char_weight_name, char_weight
-
-    def find_char_panel(self, char_name:str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
-        """
-            通过角色名查询裸装面板
-        """
-        char_panel, char_panel_name = None, None
-        if char_name in self.char_panel_data:
-            char_panels = self.char_panel_data[char_name]
-            if len(char_panels) > 0:
-                # 默认载入首个
-                char_panel = list(char_panels.values())[0]
-                char_panel_name =  "{}_{}".format(char_name, list(char_panels.keys())[0])
-                ... # 【待扩展】处理多个面板
-        return char_panel_name, char_panel
-
-    def find_loadout_name(self, char_name: str, relics_hash: List[str]) -> Optional[str]:
-        """
-        说明：
-            通过配装数据查询配装名称
-        """
-        for loadout_name, loadout_data in self.loadout_data[char_name].items():
-            if loadout_data["relic_hash"] == relics_hash:
-                return loadout_name
-        return None
-
-    def find_teams_in_loadout(self, char_name: str, loadout_name: str) -> List[Tuple[str, str]]:
-        """
-        说明：
-            通过角色名与配装名查询所在的队伍
-        """
-        ret = []
-        for group_name, team_group in self.team_data.items():
-            for team_name, team_data in team_group.items():
-                if (char_name, loadout_name) in team_data["team_members"].items():
-                    ret.append((group_name, team_name))
-        return ret
-
-    def updata_loadout_data(self, char_name: str, old_name: str, new_name: str, new_data: Optional[Dict[str, Any]]=None) -> bool:
-        """
-        说明：
-            更改配装数据，先后修改配装与队伍文件，
-            若修改了遗器配装，需检查队伍配装规范性
-        """
-        # 尝试修改配装文件
-        if new_data is None:
-            self.loadout_data[char_name][new_name] = self.loadout_data[char_name].pop(old_name)
-        else:
-            self.loadout_data[char_name].pop(old_name)
-            self.loadout_data[char_name][new_name] = new_data
-        # 尝试修改队伍文件
-        check = True
-        teams_in_loadout = self.find_teams_in_loadout(char_name, old_name)
-        for group_name, team_name in teams_in_loadout:
-            team_data = self.team_data[group_name][team_name]
-            team_data["team_members"][char_name] = new_name
-            if new_data is not None:   # 若修改了遗器配装，需检查队伍配装规范性
-                check = self.check_team_loadout(team_name, team_data)
-        if check:  # 校验成功，保存修改
-            rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
-            rewrite_json_file(TEAM_FILE_NAME, self.team_data)
-            log.info(_("配装修改成功"))
-            return True
-        else:      # 校验失败，任务回滚
-            self.loadout_data = read_json_file(LOADOUT_FILE_NAME)
-            self.team_data = read_json_file(TEAM_FILE_NAME)
-            log.error(_("配装修改失败"))
-            return False
 
     def check_team_data(self) -> bool:
         """
@@ -1402,25 +1320,36 @@ class Relic:
             log.error(_("共发现 {} 件遗器的哈希值校验失败"),format(cnt))
             return False
 
-    def set_tag_of_speed_modified(self, data: Dict[str, Any]) -> int:
+    def updata_loadout_data(self, char_name: str, old_name: str, new_name: str, new_data: Optional[Dict[str, Any]]=None) -> bool:
         """
         说明：
-            判断该遗器是否具备手动修改速度副属性小数位的资格，并进行相应设置
-        返回：
-            :return flag:
-                -1: 无资格设标，0: 已手动修正并设标，1:已手动修正但未设标，2:杂糅其他情况的未设标
+            更改配装数据，先后修改配装与队伍文件，
+            若修改了遗器配装，需检查队伍配装规范性
         """
-        if data["rarity"] != 5 or _("速度") not in data["subs_stats"]:
-            return -1
-        if data.get("speed_decimal_modified", False):
-            return 0
-        value = data["subs_stats"][_("速度")]
-        if f"{value:.1f}"[-1] != "0":
-            data["speed_decimal_modified"] = True
-            return 1
+        # 尝试修改配装文件
+        if new_data is None:
+            self.loadout_data[char_name][new_name] = self.loadout_data[char_name].pop(old_name)
         else:
-            data["speed_decimal_modified"] = False
-            return 2
+            self.loadout_data[char_name].pop(old_name)
+            self.loadout_data[char_name][new_name] = new_data
+        # 尝试修改队伍文件
+        check = True
+        teams_in_loadout = self.find_teams_in_loadout(char_name, old_name)
+        for group_name, team_name in teams_in_loadout:
+            team_data = self.team_data[group_name][team_name]
+            team_data["team_members"][char_name] = new_name
+            if new_data is not None:   # 若修改了遗器配装，需检查队伍配装规范性
+                check = self.check_team_loadout(team_name, team_data)
+        if check:  # 校验成功，保存修改
+            rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
+            rewrite_json_file(TEAM_FILE_NAME, self.team_data)
+            log.info(_("配装修改成功"))
+            return True
+        else:      # 校验失败，任务回滚
+            self.loadout_data = read_json_file(LOADOUT_FILE_NAME)
+            self.team_data = read_json_file(TEAM_FILE_NAME)
+            log.error(_("配装修改失败"))
+            return False
 
     def updata_relic_data(self, old_hash: str, new_hash: str, equip_indx: Optional[int]=None, new_data: Optional[Dict[str, Any]]=None, delete_old_data=False):
         """
@@ -1469,7 +1398,27 @@ class Relic:
         else:
             log.error(_(f"哈希值重复: {data_hash}"))
             return False
-        
+
+    def set_tag_of_speed_modified(self, data: Dict[str, Any]) -> int:
+        """
+        说明：
+            判断该遗器是否具备手动修改速度副属性小数位的资格，并进行相应设置
+        返回：
+            :return flag:
+                -1: 无资格设标，0: 已手动修正并设标，1:已手动修正但未设标，2:杂糅其他情况的未设标
+        """
+        if data["rarity"] != 5 or _("速度") not in data["subs_stats"]:
+            return -1
+        if data.get("speed_decimal_modified", False):
+            return 0
+        value = data["subs_stats"][_("速度")]
+        if f"{value:.1f}"[-1] != "0":
+            data["speed_decimal_modified"] = True
+            return 1
+        else:
+            data["speed_decimal_modified"] = False
+            return 2
+
     def ocr_character_name(self) -> str:
         """
         说明：
@@ -2281,6 +2230,57 @@ class Relic:
         if rarity == 4:  # 四星与五星遗器比值为 0.8
             num *= 0.8
         return num
+
+    def find_char_weight(self, char_name:str) -> Tuple[Optional[str], StatsWeight]:
+        """
+            通过角色名查询属性权重
+        """
+        char_weight = StatsWeight()
+        char_weight_name = None
+        if char_name in self.char_weight_data:
+            char_weights = self.char_weight_data[char_name]
+            if len(char_weights) > 0:
+                # 默认载入首个
+                char_weight = StatsWeight(list(char_weights.values())[0]["weight"])
+                char_weight_name =  "{}_{}".format(char_name, list(char_weights.keys())[0])
+                ... # 【待扩展】处理多组权重
+        return char_weight_name, char_weight
+
+    def find_char_panel(self, char_name:str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        """
+            通过角色名查询裸装面板
+        """
+        char_panel, char_panel_name = None, None
+        if char_name in self.char_panel_data:
+            char_panels = self.char_panel_data[char_name]
+            if len(char_panels) > 0:
+                # 默认载入首个
+                char_panel = list(char_panels.values())[0]
+                char_panel_name =  "{}_{}".format(char_name, list(char_panels.keys())[0])
+                ... # 【待扩展】处理多个面板
+        return char_panel_name, char_panel
+
+    def find_loadout_name(self, char_name: str, relics_hash: List[str]) -> Optional[str]:
+        """
+        说明：
+            通过配装数据查询配装名称
+        """
+        for loadout_name, loadout_data in self.loadout_data[char_name].items():
+            if loadout_data["relic_hash"] == relics_hash:
+                return loadout_name
+        return None
+
+    def find_teams_in_loadout(self, char_name: str, loadout_name: str) -> List[Tuple[str, str]]:
+        """
+        说明：
+            通过角色名与配装名查询所在的队伍
+        """
+        ret = []
+        for group_name, team_group in self.team_data.items():
+            for team_name, team_data in team_group.items():
+                if (char_name, loadout_name) in team_data["team_members"].items():
+                    ret.append((group_name, team_name))
+        return ret
 
     def is_visible(self, loadout_data: Dict[str, Any]) -> bool:
         """
