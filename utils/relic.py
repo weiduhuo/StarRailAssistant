@@ -10,10 +10,11 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 import utils.questionary.questionary as questionary
 from utils.questionary.questionary import Choice, Separator, Style
 # 改用本地的questionary模块，使之具备show_description功能，基于'tmbo/questionary/pull/330'
+# 同时修复了多处bug，并添加了功能，具体可见'weiduhuo/StarRailAssistant/tree/add-questionary'分支
 # import questionary   # questionary原项目更新并具备当前功能后，可进行替换
 from .relic_constants import *
 from .calculated import (calculated, Array2dict, StyledText, FloatValidator, ConflictValidator, 
-                         get_data_hash, str_just, print_styled_text, combine_styled_text)
+                         get_data_hash, str_just, str_len, print_styled_text, combine_styled_text)
 from .config import (RELIC_FILE_NAME, LOADOUT_FILE_NAME, TEAM_FILE_NAME, CHAR_PANEL_FILE_NAME, CHAR_WEIGHT_FILE_NAME, USER_DATA_DIR,
                      read_json_file, modify_json_file, rewrite_json_file, _, sra_config_obj)
 from .exceptions import Exception, RelicOCRException
@@ -71,18 +72,19 @@ class StatsWeight:
 
 class Relic:
 
-    def __init__(self, title=_("崩坏：星穹铁道")):
+    def __init__(self, title=_("崩坏：星穹铁道"), start_cal=True):
         """
         说明：
             初始化，载入遗器数据并校验
         """
         if sra_config_obj.language != "zh_CN":
             raise Exception(_("暂不支持简体中文之外的语言"))
-        self.calculated = calculated(title, rec_root="model/cnocr_for_relic")
-        log.info(_("命令行窗口：'{}'").format(self.calculated.cmd.title))
-        if self.calculated.cmd.title == title:
-            log.error(_("获取命令行窗口名称时，请勿点击游戏窗口"))   # 排除常见错误
-            raise Exception(_("命令行窗口获取失败"))
+        if start_cal:
+            self.calculated = calculated(title, rec_root="model/cnocr_for_relic")
+            log.info(_("命令行窗口：'{}'").format(self.calculated.cmd.title))
+            if self.calculated.cmd.title == title:
+                log.error(_("获取命令行窗口名称时，请勿点击游戏窗口"))   # 排除常见错误
+                raise Exception(_("命令行窗口获取失败"))
 
         self.is_fuzzy_match = sra_config_obj.fuzzy_match_for_relic
         """是否在遗器搜索时开启模糊匹配"""
@@ -148,6 +150,8 @@ class Relic:
                 self.check_relic_data_hash(updata=True)
             else:
                 raise Exception(_("json文件校验失败"))
+        # 校验角色裸装面板
+        self.check_char_panel()
         # 校验队伍配装规范
         if not self.check_team_data():
             log.error(_("怀疑为手动错误修改json文件导致"))
@@ -168,6 +172,7 @@ class Relic:
                 ],
                 instruction = _("(将影响词条计算与遗器评分)"),
                 use_shortcuts = True,
+                style = self.msg_style,
             ).ask()
             sra_config_obj.stats_weight_for_relic = self.subs_stats_iter_weight  # 修改配置文件
         # 用户提示
@@ -181,31 +186,31 @@ class Relic:
         title = _("遗器模块:")
         option = None  # 保存上一次的选择
         msg = "\n"+INDENT+_("注：[角色]界面的前继可为[队伍]-[角色选择]-[详情]等界面")
+        options = [
+            Choice(_("识别遗器数据"), value = 4,
+                description = INDENT+_("支持批量识别、载入[属性权重]进行评估、导出数据\n")+INDENT+_("注：对于[速度]副属性只能做保守评估，其他属性可做准确计算")
+                +INDENT+_("  可以借助第三方工具获得[速度]副属性的精确值，")+INDENT+_("  可在[编辑角色配装]中进行辅助修改，或手动修改'relics_set.json'文件中相应的小数位，")
+                +INDENT+_("  修改后的数据会永久保存，不影响遗器哈希值，可用于后续评估")),
+            Choice(_("保存当前角色的配装"), value = 0,
+                description = INDENT+_("请使游戏保持在[角色]界面")+msg),
+            Choice(_("保存当前队伍的配装"), value = 1,
+                description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别保存")+msg),
+            Choice(_("读取当前角色的配装并装备"), value = 2,
+                description = INDENT+_("请使游戏保持在[角色]界面")+msg),
+            Choice(_("读取队伍的配装并装备"), value = 3,
+                description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别读取")+msg),
+            Choice(_("编辑角色配装"), value = 5,
+                description = INDENT+_("支持查看配装、配装重命名、替换遗器等功能")),
+            Choice(_("编辑角色裸装面板"), value = 6,
+                description = INDENT+_("此处的[角色裸装面板]是指角色卸下[遗器]、佩戴[光锥]时的角色面板")+INDENT+_("若不满足于交互界面，可在明晰构造方法的前提下直接编辑'char_panel.json'文件")),
+            Choice(_("编辑角色属性权重"), value = 7,
+                description = INDENT+_("权重范围为0~1，缺损值为0")+INDENT+_("评分系统开发中...当前权重只会影响[属性着色]与[有效词条]计算")),
+            Choice(_("<<取消显示隐藏的数据>>") if self.show_hidden_data else _("<<显示隐藏的数据>>"), value=-1, shortcut_key='v'),
+            Choice(_("<<清空控制台>>"), shortcut_key='c', auto_enter=True),
+            Choice(_("<返回主菜单>"), shortcut_key='z', auto_enter=True),
+            Separator(" "),
+        ]
         while True:
-            options = [
-                Choice(_("识别遗器数据"), value = 4,
-                    description = INDENT+_("支持批量识别、载入[属性权重]进行评估、导出数据\n")+INDENT+_("注：对于[速度]副属性只能做保守评估，其他属性可做准确计算")
-                    +INDENT+_("  可以借助第三方工具获得[速度]副属性的精确值，")+INDENT+_("  可在[编辑角色配装]中进行辅助修改，或手动修改'relics_set.json'文件中相应的小数位，")
-                    +INDENT+_("  修改后的数据会永久保存，不影响遗器哈希值，可用于后续评估")),
-                Choice(_("保存当前角色的配装"), value = 0,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+msg),
-                Choice(_("保存当前队伍的配装"), value = 1,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别保存")+msg),
-                Choice(_("读取当前角色的配装并装备"), value = 2,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+msg),
-                Choice(_("读取队伍的配装并装备"), value = 3,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别读取")+msg),
-                Choice(_("编辑角色配装"), value = 5,
-                    description = INDENT+_("支持查看配装、配装重命名、替换遗器等功能")),
-                Choice(_("编辑角色裸装面板"), value = 6,
-                    description = INDENT+_("此处的[角色裸装面板]是指角色卸下[遗器]、佩戴[光锥]时的角色面板")+INDENT+_("若不满足于交互界面，可在明晰构造方法的前提下直接编辑'char_panel.json'文件")),
-                Choice(_("编辑角色属性权重"), value = 7, 
-                    description = INDENT+_("权重范围为0~1，缺损值为0")+INDENT+_("评分系统开发中...当前权重只会影响[属性着色]与[有效词条]计算")),
-                Choice(_("<<取消显示隐藏的数据>>") if self.show_hidden_data else _("<<显示隐藏的数据>>"), value=-1, shortcut_key='v'),
-                Choice(_("<<清空控制台>>"), shortcut_key='c'),
-                Choice(_("<返回主菜单>"), shortcut_key='z'),
-                Separator(" "),
-            ]
             self.calculated.switch_cmd()
             option = questionary.select(title, options, default=option, use_shortcuts=True, style=self.msg_style).ask()
             if option == 0:
@@ -245,7 +250,7 @@ class Relic:
                    description = INDENT+_("识别途中不可中断")+INDENT+_("请使游戏保持在[角色]-[遗器]-[遗器替换]界面")+INDENT+_("建议识别前手动点击[对比]提高识别度")),
             Choice(_("<<载入属性权重>>"), shortcut_key='x',
                    description=combine_styled_text(self.print_stats_weight(stats_weight), prefix="\n  启用权重:\n", indent=5) if stats_weight else None),
-            Choice(_("<返回上一级>"), shortcut_key='z'),
+            Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
             Separator(" "),
         ]
         option_0 = questionary.select(_("请选择识别的范围"), options_0, use_shortcuts=True, style=self.msg_style).ask()
@@ -331,7 +336,7 @@ class Relic:
                 Choice(_("识别当前遗器并替换"), value = 0,
                        description = INDENT+_("请使游戏保持在[角色]-[遗器]-[遗器替换]界面")+INDENT+_("建议识别前手动点击[对比]提高识别度")),
                 # 【待扩展】查询遗器数据库、推荐系统
-                Choice(_("<返回上一级>"), shortcut_key='z'),
+                Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
                 Separator(" "),
             ]
             if self.set_tag_of_speed_modified(self.relics_data[key_hash]) == 2:  
@@ -395,13 +400,14 @@ class Relic:
                 return tmp_hash
             else:
                 return None
-        def interface_2(old_loadout_data: Dict[str, Union[List[str], bool]]) -> Optional[int]:
+        def interface_2(old_loadout_data: Dict[str, Union[List[str], bool]]) -> Optional[str]:
             """
             说明：
                 第[2]层级，配装内部选项
+            返回：
+                :return loadout_name: 新的配装名称或空
             """
             option_2 = None
-            option_1_idx = default_1_idx
             old_relics_hash: List[str] = old_loadout_data["relic_hash"]
             new_relics_hash = old_relics_hash.copy()
             visible = self.is_visible(old_loadout_data)
@@ -442,28 +448,28 @@ class Relic:
                 character_data = self.loadout_data[character_name]
                 # 处理特殊选择
                 if option_2 == _("<取消>"):
-                    return option_1_idx
+                    return loadout_name
                 elif option_2 in [_("<<隐藏配装>>"), _("<<取消隐藏配装>>")]:
                     old_loadout_data["visible"] = not visible
                     rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
                     if option_2 == _("<<隐藏配装>>") and not self.show_hidden_data:
-                        option_1_idx = None
-                    return option_1_idx
+                        return None
+                    return loadout_name
                 elif option_2 == _("<完成并新建配装>"):
                     new_loadout_name = questionary.text(_("命名配装名称:"), validate=ConflictValidator(character_data.keys())).ask()
                     self.loadout_data[character_name][new_loadout_name] = {"relic_hash": new_relics_hash}
                     rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
-                    return self.get_loadout_index(character_name, new_loadout_name)
+                    return new_loadout_name
                 elif option_2 == _("<完成并更新配装 (可进行重命名)>"):
                     new_loadout_name = loadout_name
                     if questionary.confirm(_("是否更改配装名称"), default=False).ask():
-                        new_loadout_name = questionary.text(_("命名配装名称:"), validate=ConflictValidator(character_data.keys())).ask()
+                        new_loadout_name = questionary.text(_("命名配装名称:"), default=loadout_name, validate=ConflictValidator(character_data.keys())).ask()
                     # 判断是否是否修改了遗器数据
                     new_loadout_data = {"relic_hash": new_relics_hash} if new_relics_hash != old_relics_hash else None
                     # 尝试进行配装修改
                     ret = self.updata_loadout_data(character_name, loadout_name, new_loadout_name, new_loadout_data)
                     if ret:    # 配装修改成功
-                        return self.get_loadout_index(character_name, new_loadout_name)
+                        return new_loadout_name
                     else:
                         continue  # 配装修改失败，给予机会重新修改
                 # 编辑遗器
@@ -483,7 +489,7 @@ class Relic:
                 options_0.append(Choice(choice_title, value=char_name))
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
-            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
             if option_0 == "<返回上一级>":
                 return
@@ -496,8 +502,9 @@ class Relic:
                 option_1 = self.ask_loadout_options(character_name, default_idx=default_1_idx, title=_("请选择要编辑的配装:"))
                 if option_1 == _("<返回上一级>") or not isinstance(option_1, tuple):
                     break
-                loadout_name, loadout_data, default_1_idx = option_1
-                default_1_idx = interface_2(loadout_data)
+                loadout_name, loadout_data = option_1
+                loadout_name = interface_2(loadout_data)
+                default_1_idx = self.get_loadout_index(character_name, loadout_name)
 
     def edit_character_weight(self, tmp=False) -> Optional[StatsWeight]:
         """
@@ -519,7 +526,7 @@ class Relic:
                 for name in WEIGHT_STATS_NAME[st:ed]:  # 按需切片
                     # 按需显示已有数值
                     value_str = "{value:.2f}".format(value=weight[name]) if name in weight else " "
-                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name))
+                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name, auto_enter=True))
                 return choices
             while True:
                 options_1 = get_choices(0,-7) + [Separator()] + get_choices(-7) + [Separator()]
@@ -561,7 +568,7 @@ class Relic:
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
             options_0.extend([
-                Choice(_("<返回上一级>"), shortcut_key='z'),
+                Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
                 Separator(" ")
             ])
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
@@ -589,46 +596,46 @@ class Relic:
             编辑角色裸装面板
         """
         option_0 = None
-        def interface_2(title: str, stats: Dict[str, float], stats_names: List[str]):
+        def interface_3(title: str, stats: Dict[str, float], stats_names: List[str]):
             """
             说明：
-                第[2]层级，选择编辑的属性，结果通过stats字典引用返回
+                第[3]层级，选择编辑的属性，结果通过stats字典引用返回
             """
-            option_2 = None
+            option_3 = None
             def get_choices(st: Optional[int]=None, ed: Optional[int]=None) -> List[Choice]:
                 choices = []
                 for name in stats_names[st:ed]:  # 按需切片，并显示已有数值
                     value_str = "{value:.2f}{pre}".format(value=stats[name], pre=" " if name in NOT_PRE_STATS else "%") if name in stats else " "
-                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name))
+                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name, auto_enter=True))
                 return choices
             while True:
                 # 生成选择
                 if stats_names[0] == BASE_VALUE_NAME[0]:  # 白值面板
-                    options_2 = get_choices()
+                    options_3 = get_choices()
                 else:                                     # 属性面板，使属性按组别呈现
-                    options_2 = get_choices(0,8) + [Separator()] + get_choices(8,15) + [Separator()] + get_choices(15,22) + [Separator()] + get_choices(22,28) + [Separator()] + get_choices(28)
-                options_2.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+                    options_3 = get_choices(0,8) + [Separator()] + get_choices(8,15) + [Separator()] + get_choices(15,22) + [Separator()] + get_choices(22,28) + [Separator()] + get_choices(28)
+                options_3.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
                 # 进行选择
-                option_2 = questionary.select(title, options_2, default=option_2, use_shortcuts=True, style=self.msg_style).ask()
-                if option_2 == _("<返回上一级>"):
+                option_3 = questionary.select(title, options_3, default=option_3, use_shortcuts=True, style=self.msg_style).ask()
+                if option_3 == _("<返回上一级>"):
                     return
                 # 处理选择
-                name = option_2
+                name = option_3
                 value = questionary.text("请输入数值:", validate=FloatValidator(0)).ask()  # input float
                 stats[name] = float(value)  # 更新数据
-        def interface_1(char_panel: Dict[str, Union[Dict[str, float], List[str]]]) -> Optional[Dict[str, Union[Dict[str, float], List[str]]]]:
+        def interface_2(char_panel: Dict[str, Union[Dict[str, float], List[str]]]) -> Optional[Dict[str, Union[Dict[str, float], List[str]]]]:
             """
             说明：
-                第[1]层级，选择编辑的类别
+                第[2]层级，选择编辑的类别
             """
-            option_1 = None
+            option_2 = None
             base_values = char_panel.get("base", {}).copy()   # 白值属性
             additonal_stats = char_panel.get("additonal", {"暴击率":5, "暴击伤害":50, "能量恢复效率":100}).copy()  # 附加属性 (设置角色默认值)
             conditional_stats = char_panel.get("conditional", {}).copy()  # 条件属性
             extra_effect_list:list = char_panel.get("extra_effect", []).copy() # 额外效果
             while True:
                 extra_effect_msg = "".join(INDENT+f"{i+1}.{text}" for i, text in enumerate(extra_effect_list))
-                options_1 = [
+                options_2 = [
                     Choice(_("白值属性"), value = 0,
                            description = INDENT+_("游戏内的[白值]只显示到整数位，推荐通过第三方获取精确数值")),
                     Choice(_("附加属性 (可选)"), value=1, 
@@ -641,20 +648,20 @@ class Relic:
                     Choice(_("<完成>"), shortcut_key='z', disabled = None if len(base_values)==len(BASE_VALUE_NAME) else _("白值属性缺失")),
                     Separator(" "),
                 ]  # 注：必须白值属性非空才可选择完成
-                option_1 = questionary.select(_("编辑人物裸装面板："), choices=options_1, default=option_1, use_shortcuts=True, style=self.msg_style).ask()
-                if option_1 == 0:
-                    interface_2(_("编辑白值属性"), base_values, BASE_VALUE_NAME)
-                elif option_1 == 1:
-                    interface_2(_("编辑附加属性"), additonal_stats, ALL_STATS_NAME)
-                elif option_1 == 2:
-                    interface_2(_("编辑条件属性"), conditional_stats, ALL_STATS_NAME)
-                elif option_1 == 3:
+                option_2 = questionary.select(_("编辑人物裸装面板:"), choices=options_2, default=option_2, use_shortcuts=True, style=self.msg_style).ask()
+                if option_2 == 0:
+                    interface_3(_("编辑白值属性"), base_values, BASE_VALUE_NAME)
+                elif option_2 == 1:
+                    interface_3(_("编辑附加属性"), additonal_stats, ALL_STATS_NAME)
+                elif option_2 == 2:
+                    interface_3(_("编辑条件属性"), conditional_stats, ALL_STATS_NAME)
+                elif option_2 == 3:
                     text_lines = questionary.text("添加额外效果 (一行为一条)", multiline=True).ask()
                     text_lines = filter(lambda x: not re.match(r"\s*$", x), text_lines.split("\n"))  # 过滤无效行
                     extra_effect_list.extend(text_lines)
-                elif option_1 == _("<取消>"):
+                elif option_2 == _("<取消>"):
                     return None
-                elif option_1 == _("<完成>"):
+                elif option_2 == _("<完成>"):
                     char_panel = {
                         "base": base_values,
                         "additonal": additonal_stats,
@@ -663,35 +670,66 @@ class Relic:
                     }
                     log.debug("\n"+pp.pformat(char_panel))
                     return char_panel
-        # 第[0]层级
+        def interface_1():
+            """
+            说明：
+                第[1]层级，选择编辑的面板
+            """
+            default_1_idx = None
+            while True:
+                options_1 = self.get_panel_options(character_name)
+                options_1.extend([
+                    Choice(_("<<设置默认面板>>"), shortcut_key='s', auto_enter=True),
+                    Choice(_("<新建面板>"), shortcut_key='x', auto_enter=True),
+                    Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
+                ])
+                default = options_1[default_1_idx] if default_1_idx is not None else None
+                option_1 = questionary.select(_("请选择要编辑的面板:"), options_1, default=default, use_shortcuts=True, style=self.msg_style).ask()
+                character_data = self.char_panel_data[character_name]
+                if option_1 == _("<返回上一级>"):
+                    return
+                if option_1 == _("<<设置默认面板>>"):
+                    global_name, __ = questionary.select(_("请选择默认面板:"), options_1[:-3], use_shortcuts=True, style=self.msg_style).ask()
+                    self.set_tag_of_global(character_data, global_name)
+                    rewrite_json_file(CHAR_PANEL_FILE_NAME, self.char_panel_data)
+                    continue
+                elif option_1 == _("<新建面板>"):
+                    panel_name = ""
+                    charcacter_panel = {}
+                else:
+                    panel_name, charcacter_panel = option_1
+                    default_1_idx = self.get_panel_index(character_name, panel_name)
+                # 交互编辑
+                charcacter_panel = interface_2(charcacter_panel)
+                if charcacter_panel is None:   # 取消编辑
+                    continue
+                # 保存记录
+                new_panel_name = panel_name
+                if not panel_name or panel_name and questionary.confirm(_("是否对面板重命名"), default=False).ask():
+                    new_panel_name = questionary.text(_("命名面板名称:"), default=panel_name, validate=ConflictValidator(character_data.keys())).ask()
+                if panel_name:  # 更新数据
+                    self.updata_panel_data(character_name, panel_name, new_panel_name, charcacter_panel)
+                else:           # 新建数据
+                    self.char_panel_data[character_name][new_panel_name] = charcacter_panel
+                    rewrite_json_file(CHAR_PANEL_FILE_NAME, self.char_panel_data)
+                default_1_idx = self.get_panel_index(character_name, new_panel_name)
+                log.info(_("角色面板编辑成功"))
+        # 第[0]层级，选择角色
         while True:
-            # 选择人物
             charcacter_names = sorted(self.loadout_data.keys())      # 对配装数据中角色名称排序
             options_0 = [
-                Choice(str_just(char_name, 15) + _("■ {}").format("1" if char_name in self.char_panel_data else "0"), value = char_name) 
+                Choice(str_just(char_name, 15) + _("■ {}").format(len(self.char_panel_data.get(char_name, {}))), value = char_name) 
                 for char_name in charcacter_names
             ]
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
-            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
             if option_0 == _("<返回上一级>"):
                 return
             # 获取记录
-            charcacter_name = option_0
-            panel_name, charcacter_panel = list(self.char_panel_data.get(charcacter_name, {"None":{}}).items())[0]
-            ... # 【待扩展】同一角色支持保存多个面板
-            # 交互编辑
-            charcacter_panel = interface_1(charcacter_panel)
-            if charcacter_panel is None:   # 取消编辑
-                continue
-            # 保存记录
-            if panel_name == "None": panel_name = ""
-            if not panel_name or panel_name and questionary.confirm(_("是否对面板重命名"), default=False).ask():
-                panel_name = questionary.text(_("命名面板名称:"), default=panel_name).ask()
-            self.char_panel_data[charcacter_name] = {panel_name: charcacter_panel}
-            rewrite_json_file(CHAR_PANEL_FILE_NAME, self.char_panel_data)
-            log.info(_("角色面板编辑成功"))
+            character_name = option_0
+            interface_1()
 
     def equip_loadout_for_team(self):
         """
@@ -703,7 +741,7 @@ class Relic:
         # 选择队伍
         option = questionary.select(
             _("请选择对当前队伍进行遗器装备的编队："),
-            choices = self.get_team_options() + [Choice(_("<返回上一级>"), shortcut_key='z'), Separator(" ")],
+            choices = self.get_team_options() + [Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True), Separator(" ")],
             use_shortcuts=True, style=self.msg_style,
         ).ask()
         if option == _("<返回上一级>"):
@@ -746,7 +784,7 @@ class Relic:
         option = self.ask_loadout_options(character_name, title=_("请选择要装备的配装:"))
         if option == _("<返回上一级>") or not isinstance(option, tuple):
             return
-        loadout_name, loadout_data, __ = option
+        loadout_name, loadout_data = option
         self.calculated.switch_window()
         # 进行配装
         self.calculated.relative_click((12,40) if IS_PC else (16,48))  # 点击遗器，进入[角色]-[遗器]界面
@@ -873,7 +911,7 @@ class Relic:
                 if option == _("<退出>"):   # 退出本次编队
                     return
                 elif isinstance(option, tuple):
-                    loadout_name, loadout_data, __ = option    # 获取已录入的配装数据
+                    loadout_name, loadout_data = option    # 获取已录入的配装数据
                     relics_hash: List[str] = loadout_data["relic_hash"]
                 elif option == _("<识别当前配装>"):
                     self.calculated.switch_window()
@@ -1197,88 +1235,22 @@ class Relic:
                 key != _("速度") and old_data["subs_stats"][key] > new_data["subs_stats"][key]:
                 return False        # 考虑手动提高速度数据精度的情况
         return True
-    
-    def find_char_weight(self, char_name:str) -> Tuple[Optional[str], StatsWeight]:
-        """
-            通过角色名查询属性权重
-        """
-        char_weight = StatsWeight()
-        char_weight_name = None
-        if char_name in self.char_weight_data:
-            char_weights = self.char_weight_data[char_name]
-            if len(char_weights) > 0:
-                # 默认载入首个
-                char_weight = StatsWeight(list(char_weights.values())[0]["weight"])
-                char_weight_name =  "{}_{}".format(char_name, list(char_weights.keys())[0])
-                ... # 【待扩展】处理多组权重
-        return char_weight_name, char_weight
 
-    def find_char_panel(self, char_name:str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
-        """
-            通过角色名查询裸装面板
-        """
-        char_panel, char_panel_name = None, None
-        if char_name in self.char_panel_data:
-            char_panels = self.char_panel_data[char_name]
-            if len(char_panels) > 0:
-                # 默认载入首个
-                char_panel = list(char_panels.values())[0]
-                char_panel_name =  "{}_{}".format(char_name, list(char_panels.keys())[0])
-                ... # 【待扩展】处理多个面板
-        return char_panel_name, char_panel
-
-    def find_loadout_name(self, char_name: str, relics_hash: List[str]) -> Optional[str]:
+    def check_char_panel(self):
         """
         说明：
-            通过配装数据查询配装名称
+            检查角色裸装面板的数据规范性并矫正
         """
-        for loadout_name, loadout_data in self.loadout_data[char_name].items():
-            if loadout_data["relic_hash"] == relics_hash:
-                return loadout_name
-        return None
-
-    def find_teams_in_loadout(self, char_name: str, loadout_name: str) -> List[Tuple[str, str]]:
-        """
-        说明：
-            通过角色名与配装名查询所在的队伍
-        """
-        ret = []
-        for group_name, team_group in self.team_data.items():
-            for team_name, team_data in team_group.items():
-                if (char_name, loadout_name) in team_data["team_members"].items():
-                    ret.append((group_name, team_name))
-        return ret
-
-    def updata_loadout_data(self, char_name: str, old_name: str, new_name: str, new_data: Optional[Dict[str, Any]]=None) -> bool:
-        """
-        说明：
-            更改配装数据，先后修改配装与队伍文件，
-            若修改了遗器配装，需检查队伍配装规范性
-        """
-        # 尝试修改配装文件
-        if new_data is None:
-            self.loadout_data[char_name][new_name] = self.loadout_data[char_name].pop(old_name)
-        else:
-            self.loadout_data[char_name].pop(old_name)
-            self.loadout_data[char_name][new_name] = new_data
-        # 尝试修改队伍文件
-        check = True
-        teams_in_loadout = self.find_teams_in_loadout(char_name, old_name)
-        for group_name, team_name in teams_in_loadout:
-            team_data = self.team_data[group_name][team_name]
-            team_data["team_members"][char_name] = new_name
-            if new_data is not None:   # 若修改了遗器配装，需检查队伍配装规范性
-                check = self.check_team_loadout(team_name, team_data)
-        if check:  # 校验成功，保存修改
-            rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
-            rewrite_json_file(TEAM_FILE_NAME, self.team_data)
-            log.info(_("配装修改成功"))
-            return True
-        else:      # 校验失败，任务回滚
-            self.loadout_data = read_json_file(LOADOUT_FILE_NAME)
-            self.team_data = read_json_file(TEAM_FILE_NAME)
-            log.error(_("配装修改失败"))
-            return False
+        for char_name, char_panels in self.char_panel_data.items():
+            if len(char_panels) == 1:
+                self.set_tag_of_global(char_panels)   # 仅有一个面板时，自动设置全局标记
+            elif len(char_panels) > 1:
+                ret, __ = self.find_char_panel(char_name)
+                if not ret:  # 存在全局冲突，或者未设置全局标记
+                    option = questionary.select(_("请设置'{}'角色的默认面板:").format(char_name), list(char_panels.keys()), use_shortcuts=True, style=self.msg_style).ask()
+                    self.set_tag_of_global(char_panels, option)
+        rewrite_json_file(CHAR_PANEL_FILE_NAME, self.char_panel_data)
+        log.info(_("角色裸装面板校验成功"))
 
     def check_team_data(self) -> bool:
         """
@@ -1402,25 +1374,50 @@ class Relic:
             log.error(_("共发现 {} 件遗器的哈希值校验失败"),format(cnt))
             return False
 
-    def set_tag_of_speed_modified(self, data: Dict[str, Any]) -> int:
+    def updata_panel_data(self, char_name: str, old_name: str, new_name: str, new_data: Optional[Dict[str, Any]]=None):
         """
         说明：
-            判断该遗器是否具备手动修改速度副属性小数位的资格，并进行相应设置
-        返回：
-            :return flag:
-                -1: 无资格设标，0: 已手动修正并设标，1:已手动修正但未设标，2:杂糅其他情况的未设标
+            更改面板数据，先后修改面板与配装文件
         """
-        if data["rarity"] != 5 or _("速度") not in data["subs_stats"]:
-            return -1
-        if data.get("speed_decimal_modified", False):
-            return 0
-        value = data["subs_stats"][_("速度")]
-        if f"{value:.1f}"[-1] != "0":
-            data["speed_decimal_modified"] = True
-            return 1
+        # 修改面板文件
+        if new_data is None:
+            self.char_panel_data[char_name][new_name] = self.char_panel_data[char_name].pop(old_name)
         else:
-            data["speed_decimal_modified"] = False
-            return 2
+            self.char_panel_data[char_name].pop(old_name)
+            self.char_panel_data[char_name][new_name] = new_data
+        # 修改配装文件
+        ... # 【待扩展】
+
+    def updata_loadout_data(self, char_name: str, old_name: str, new_name: str, new_data: Optional[Dict[str, Any]]=None) -> bool:
+        """
+        说明：
+            更改配装数据，先后修改配装与队伍文件，
+            若修改了遗器配装，需检查队伍配装规范性
+        """
+        # 尝试修改配装文件
+        if new_data is None:
+            self.loadout_data[char_name][new_name] = self.loadout_data[char_name].pop(old_name)
+        else:
+            self.loadout_data[char_name].pop(old_name)
+            self.loadout_data[char_name][new_name] = new_data
+        # 尝试修改队伍文件
+        check = True
+        teams_in_loadout = self.find_teams_in_loadout(char_name, old_name)
+        for group_name, team_name in teams_in_loadout:
+            team_data = self.team_data[group_name][team_name]
+            team_data["team_members"][char_name] = new_name
+            if new_data is not None:   # 若修改了遗器配装，需检查队伍配装规范性
+                check = self.check_team_loadout(team_name, team_data)
+        if check:  # 校验成功，保存修改
+            rewrite_json_file(LOADOUT_FILE_NAME, self.loadout_data)
+            rewrite_json_file(TEAM_FILE_NAME, self.team_data)
+            log.info(_("配装修改成功"))
+            return True
+        else:      # 校验失败，任务回滚
+            self.loadout_data = read_json_file(LOADOUT_FILE_NAME)
+            self.team_data = read_json_file(TEAM_FILE_NAME)
+            log.error(_("配装修改失败"))
+            return False
 
     def updata_relic_data(self, old_hash: str, new_hash: str, equip_indx: Optional[int]=None, new_data: Optional[Dict[str, Any]]=None, delete_old_data=False):
         """
@@ -1469,7 +1466,40 @@ class Relic:
         else:
             log.error(_(f"哈希值重复: {data_hash}"))
             return False
-        
+
+    def set_tag_of_speed_modified(self, data: Dict[str, Any]) -> int:
+        """
+        说明：
+            判断该遗器是否具备手动修改速度副属性小数位的资格，并进行相应设置
+        返回：
+            :return flag:
+                -1: 无资格设标，0: 已手动修正并设标，1:已手动修正但未设标，2:杂糅其他情况的未设标
+        """
+        if data["rarity"] != 5 or _("速度") not in data["subs_stats"]:
+            return -1
+        if data.get("speed_decimal_modified", False):
+            return 0
+        value = data["subs_stats"][_("速度")]
+        if f"{value:.1f}"[-1] != "0":
+            data["speed_decimal_modified"] = True
+            return 1
+        else:
+            data["speed_decimal_modified"] = False
+            return 2
+
+    def set_tag_of_global(self, data: Dict[str, Dict[str, Any]], key: Optional[str]=None):
+        """
+        说明：
+            设置全局默认标记 (可兼容裸装面板与属性权重)
+        """
+        if not key and len(data) > 1:
+            raise ValueError(_("仅当data长度为1时，key才可为None"))
+        for name, value in data.items():
+            if name == key or not key and len(data) == 1:
+                value["global"] = True
+            else:
+                value["global"] = False
+
     def ocr_character_name(self) -> str:
         """
         说明：
@@ -1773,10 +1803,10 @@ class Relic:
 
     def ask_loadout_options(
         self, character_name: str,
-        add_options: Optional[List[Choice]] = [Choice(_("<返回上一级>"), shortcut_key='z')],
+        add_options: Optional[List[Choice]] = [Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True)],
         default_idx: Optional[int] = None,
         title: str = _("请选择配装:"),
-    ) -> Union[Tuple[str, Dict[str, Union[List[str], bool]], int], str]:
+    ) -> Union[Tuple[str, Dict[str, Union[List[str], bool]]], str]:
         """
         说明：
             询问并获得该角色配装的选择
@@ -1786,7 +1816,7 @@ class Relic:
             :param default: 默认选项的序列号
             :param title: 标题
         返回：
-            :return option: 元组(配装名称, 配装数据, 序列号) 或 附加选项名称
+            :return option: 元组(配装名称, 配装数据) 或 附加选项名称
                 loadout_data = {
                     "relic_hash": List[relic_hash:str],   # 必有
                     "visible": bool,   # 可有
@@ -1797,15 +1827,15 @@ class Relic:
         loadout_len = len(options)
         if options:
             if self.loadout_detail_type == 0:
-                options.append(Choice(_("<<切换为遗器详情>>"), shortcut_key='v'))
+                options.append(Choice(_("<<切换为遗器详情>>"), shortcut_key='v', auto_enter=True))
                 options.append(
                     Choice(
-                        _("<<关闭条件效果>>") if self.activate_conditional else _("<<开启条件效果>>"), shortcut_key='x',
+                        _("<<关闭条件效果>>") if self.activate_conditional else _("<<开启条件效果>>"), shortcut_key='x', auto_enter=True,
                         description = INDENT+_("涵盖[遗器套装效果]与自定义的[角色裸装面板]中的条件效果")+INDENT+_("开启时，默认激活全部条件效果的最大效果")
                     )
                 )  # 【待扩展】自动激活达到可计算触发条件的条件效果
             else:
-                options.append(Choice(_("<<切换为面板详情>>"), shortcut_key='v'))
+                options.append(Choice(_("<<切换为面板详情>>"), shortcut_key='v', auto_enter=True))
         else:
             options.append(Separator(_("--配装记录为空--")))
         if add_options:
@@ -1833,19 +1863,37 @@ class Relic:
                 :return description: 队员配装的简要信息
         """
         if not self.team_data:
-            return [(Choice(_(" --空--"), disabled=_("请先保存队伍配装")))]
+            return [Choice(_(" --空--"), disabled=_("请先保存队伍配装"))]
         group_data = self.team_data["compatible"]    # 获取非互斥队组别信息
         group_data = sorted(group_data.items())      # 按键名即队伍名称排序
         group_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, group_data)
         ...  # 获取互斥队伍组别信息【待扩展】
         prefix = "\n" + " " * 5
         choice_options = [Choice(
-                title = str_just(team_name, 12), 
+                title = team_name,
                 value = team_data["team_members"],
                 description = "".join(
                         prefix + str_just(char_name, 10) + " " + self.get_loadout_brief(self.loadout_data[char_name][loadout_name]["relic_hash"]) 
                     for char_name, loadout_name in team_data["team_members"].items())
             ) for team_name, team_data in group_data]
+        return choice_options
+
+    def get_panel_options(self, character_name: str) -> List[Choice]:
+        """
+        说明：
+            获取该人物裸装面板的选项表
+        """
+        character_data = self.char_panel_data.get(character_name, None)
+        if not character_data:
+            return [Choice(_(" --空--"), disabled=_("请先保存面板"))]
+        character_data = sorted(character_data.items())      # 按键名即面板名排序
+        choice_options = []
+        for panel_name, panel_data in character_data:
+            choice_options.append(Choice(
+                title = str_just(panel_name, 16) + " " + (_("[默认]") if self.is_global(panel_data) else ""),
+                value = (panel_name, panel_data),
+                description = None   # 【待扩展】打印裸装面板
+            ))
         return choice_options
 
     def get_loadout_options(self, character_name: str) -> List[Choice]:
@@ -1856,27 +1904,43 @@ class Relic:
             :param character_name: 人物名称
         返回：
             :return choice_options: 人物配装记录的选项表，Choice构造参数如下：
-                :return title: 配装名称+配装简要信息,
-                :return value: 元组(配装名称, 配装数据, 序列号),
+                :return title: 配装名称+配装简要信息
+                :return value: 元组(配装名称, 配装数据)
                 :return description: 配装各属性数值统计
         """
         character_data = self.loadout_data[character_name]
         character_data = sorted(character_data.items())      # 按键名即配装名排序
+        max_len = max(str_len(name) for name, __ in character_data)
+        max_len = max_len if max_len > 8 else 8
         character_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, character_data)
         choice_options = []
-        for idx, (loadout_name, loadout_data) in enumerate(character_data):
+        for loadout_name, loadout_data in character_data:
             choice_options.append(Choice(
-                title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]), 
-                value = (loadout_name, loadout_data, idx),
+                title = str_just(loadout_name, max_len) + "   " + self.get_loadout_brief(loadout_data["relic_hash"]),
+                value = (loadout_name, loadout_data),
                 description = self.get_loadout_detail(loadout_data["relic_hash"], character_name, 5)
             ))
         return choice_options
 
-    def get_loadout_index(self, character_name: str, key_name: str) -> Optional[int]:
+    def get_panel_index(self, character_name: str, key_name: str) -> Optional[int]:
+        """
+        说明：
+            获取裸装面板在有序序列中的序列号
+        """
+        character_data = self.char_panel_data[character_name]
+        character_data = sorted(character_data.items())      # 按键名即面板名排序
+        for idx, (panel_name, __) in enumerate(character_data):
+            if panel_name == key_name:
+                return idx
+        return None
+
+    def get_loadout_index(self, character_name: str, key_name: Optional[str]=None) -> Optional[int]:
         """
         说明：
             获取配装记录在有序序列中的序列号
         """
+        if key_name is None:
+            return None
         character_data = self.loadout_data[character_name]
         character_data = sorted(character_data.items())      # 按键名即配装名排序
         character_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, character_data)
@@ -2282,9 +2346,68 @@ class Relic:
             num *= 0.8
         return num
 
-    def is_visible(self, loadout_data: Dict[str, Any]) -> bool:
+    def find_char_weight(self, char_name:str) -> Tuple[Optional[str], StatsWeight]:
+        """
+            通过角色名查询属性权重
+        """
+        char_weight = StatsWeight()
+        char_weight_name = None
+        if char_name in self.char_weight_data:
+            char_weights = self.char_weight_data[char_name]
+            if len(char_weights) > 0:
+                # 默认载入首个
+                char_weight = StatsWeight(list(char_weights.values())[0]["weight"])
+                char_weight_name =  "{}_{}".format(char_name, list(char_weights.keys())[0])
+                ... # 【待扩展】处理多组权重
+        return char_weight_name, char_weight
+
+    def find_char_panel(self, char_name:str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        """
+            通过角色名查询裸装面板
+        """
+        char_panel_name, char_panel = None, None
+        char_panels = self.char_panel_data.get(char_name, {})
+        for key, value in char_panels.items():
+            if self.is_global(value):
+                if char_panel:
+                    log.error(_("'{}'角色的裸装面板的全局设置存在冲突").format(char_name))
+                    return None, None
+                char_panel_name = "{}_{}".format(char_name, key)
+                char_panel = value
+        return char_panel_name, char_panel
+
+    def find_loadout_name(self, char_name: str, relics_hash: List[str]) -> Optional[str]:
+        """
+        说明：
+            通过配装数据查询配装名称
+        """
+        for loadout_name, loadout_data in self.loadout_data[char_name].items():
+            if loadout_data["relic_hash"] == relics_hash:
+                return loadout_name
+        return None
+
+    def find_teams_in_loadout(self, char_name: str, loadout_name: str) -> List[Tuple[str, str]]:
+        """
+        说明：
+            通过角色名与配装名查询所在的队伍
+        """
+        ret = []
+        for group_name, team_group in self.team_data.items():
+            for team_name, team_data in team_group.items():
+                if (char_name, loadout_name) in team_data["team_members"].items():
+                    ret.append((group_name, team_name))
+        return ret
+
+    def is_visible(self, data: Dict[str, Any]) -> bool:
         """
         说明：
             判断数据是否可见 (可兼容配装数据与队伍数据，无标识默认为可见)
         """
-        return loadout_data.get("visible", True)
+        return data.get("visible", True)
+
+    def is_global(self, data: Dict[str, Any]) -> bool:
+        """
+        说明：
+            判断数据是否为全局默认 (可兼容裸装面板与属性权重)
+        """
+        return data.get("global", False)

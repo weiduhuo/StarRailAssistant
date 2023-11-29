@@ -1,3 +1,4 @@
+import copy
 import inspect
 from typing import Any
 from typing import Callable
@@ -75,6 +76,9 @@ class Choice:
     description: Optional[FormattedText]
     """Choice description"""
 
+    auto_enter: Optional[bool]
+    """When used shortcut, the result will be accepted without the need to press 'Enter'"""
+
     def __init__(
         self,
         title: FormattedText,
@@ -83,11 +87,13 @@ class Choice:
         checked: Optional[bool] = False,
         shortcut_key: Optional[Union[str, bool]] = True,
         description: Optional[FormattedText] = None,
+        auto_enter: bool = False,
     ) -> None:
         self.disabled = disabled
         self.title = title
         self.checked = checked if checked is not None else False
         self.description = description
+        self.auto_enter  = auto_enter if auto_enter is not None else False
 
         if value is not None:
             self.value = value
@@ -113,15 +119,15 @@ class Choice:
 
         Args:
             c: Either a :obj:`str`, :class:`Choice` or :obj:`dict` with
-               ``name``, ``value``, ``disabled``, ``checked`` and
-               ``key`` properties.
+               ``name``, ``value``, ``disabled``, ``checked``, 
+               ``key``, ``description`` and ``auto_enter`` properties.
 
         Returns:
             An instance of the :class:`Choice` object.
         """
 
         if isinstance(c, Choice):
-            return c
+            return copy.copy(c)
         elif isinstance(c, str):
             return Choice(c, c)
         else:
@@ -132,6 +138,7 @@ class Choice:
                 c.get("checked"),
                 c.get("key"),
                 c.get("description", None),
+                c.get("auto_enter", None),
             )
 
     def get_shortcut_title(self):
@@ -289,7 +296,7 @@ class InquirerControl(FormattedTextControl):
 
     def _is_selected(self, choice: Choice):
         if isinstance(self.default, Choice):
-            compare_default = self.default == choice
+            compare_default = self.default.value == choice.value
         else:
             compare_default = self.default == choice.value
         return choice.checked or compare_default and self.default is not None

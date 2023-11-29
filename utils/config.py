@@ -70,8 +70,8 @@ def read_json_file(filename: str, path=False, schema:dict=None) -> dict:
             if schema:
                 try:
                     jsonschema.validate(data, schema)
-                except jsonschema.exceptions.ValidationError as e:
-                    raise Exception(_(f"JSON 数据不符合格式规范: {e}"))
+                except jsonschema.exceptions.ValidationError:
+                    raise Exception(_(f"JSON 数据不符合格式规范"))
             if path:
                 return data, file_path
             else:

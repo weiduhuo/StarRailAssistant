@@ -1179,15 +1179,28 @@ def get_data_hash(data: Any, key_filter: Optional[List[str]]=None, speed_modifie
         raise ValueError(_("不支持dict以外类型的类型使用键值过滤器"))
     # pprint默认sort_dicts=True，对键值进行排序，以确保字典类型的唯一性
     return hashlib.md5(pprint.pformat(tmp_data).encode('utf-8')).hexdigest()
-    
-def str_just(text: str, width: int, left=True):
+
+def str_just(text: str, width: int, left=True) -> str:
     """
     说明：
-        封装str.rjust()&str.ljust()，以适应中文字符的实际宽度
+        封装str.rjust()&str.ljust()，以适配中文字符的实际宽度
     """
-    ch_cnt = (len(text.encode('utf-8')) - len(text)) // 2   # 中文字符的个数
     if left:
-        return text.ljust(width-ch_cnt)
+        return text.ljust(width-ch_cnt(text))
     else:
-        return text.rjust(width-ch_cnt)
+        return text.rjust(width-ch_cnt(text))
+
+def str_len(text: str) -> int:
+    """
+    说明：
+        返回适配中文字符的实际长度
+    """
+    return ch_cnt(text) + len(text)
+
+def ch_cnt(text: str) -> int:
+    """
+    说明：
+        返回文本中中文字符的个数
+    """
+    return (len(text.encode('utf-8')) - len(text)) // 2
     
