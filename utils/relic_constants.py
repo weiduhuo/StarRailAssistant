@@ -298,6 +298,12 @@ TEAM_SCHEMA_PART = {
                 "maxProperties": 4
             },
             "visible": {"type": "boolean"},  # 是否可见 (变相可恢复性删除)
+            "panel": {                       # 绑定的角色裸装面板
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "null"}         # 为空时，会去寻找全局面板
+                ]
+            },
             # 【可扩展】如"ordered"等其他队伍属性
         },
         "required": ["team_members"],  # 需包含遗器的全部固有属性
@@ -344,7 +350,7 @@ CHAR_STATS_PANEL_SCHEMA = {
                     "type": "array", 
                     "items": {"type": "string"}
                 },
-                # 【待扩展】 如"global"
+                "global": {"type": "boolean"},     # 是否为全局面板
             },
             "required": ["base"],   # 白值属性面板为必需
             "additionalProperties": False
