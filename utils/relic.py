@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 import utils.questionary.questionary as questionary
 from utils.questionary.questionary import Choice, Separator, Style
 # 改用本地的questionary模块，使之具备show_description功能，基于'tmbo/questionary/pull/330'
+# 同时修复了多处bug，并添加了功能，具体可见'weiduhuo/StarRailAssistant/tree/add-questionary'分支
 # import questionary   # questionary原项目更新并具备当前功能后，可进行替换
 from .relic_constants import *
 from .calculated import (calculated, Array2dict, StyledText, FloatValidator, ConflictValidator, 
