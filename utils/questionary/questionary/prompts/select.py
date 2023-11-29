@@ -192,6 +192,10 @@ def select(
 
     layout = common.create_inquirer_layout(ic, get_prompt_tokens, **kwargs)
 
+    def exit_with_answer(event):
+        ic.is_answered = True
+        event.app.exit(result=ic.get_pointed_at().value)
+
     bindings = KeyBindings()
 
     @bindings.add(Keys.ControlQ, eager=True)
@@ -212,14 +216,16 @@ def select(
                 continue
 
             # noinspection PyShadowingNames
-            def _reg_binding(i, keys):
+            def _reg_binding(i, keys, auto_enter):
                 # trick out late evaluation with a "function factory":
                 # https://stackoverflow.com/a/3431699
                 @bindings.add(keys, eager=True)
                 def select_choice(event):
                     ic.pointed_at = i
+                    if auto_enter:
+                        exit_with_answer(event)
 
-            _reg_binding(i, c.shortcut_key)
+            _reg_binding(i, c.shortcut_key, c.auto_enter)
 
     def move_cursor_down(event):
         ic.select_next()
@@ -243,10 +249,7 @@ def select(
         bindings.add(Keys.ControlN, eager=True)(move_cursor_down)
         bindings.add(Keys.ControlP, eager=True)(move_cursor_up)
 
-    @bindings.add(Keys.ControlM, eager=True)
-    def set_answer(event):
-        ic.is_answered = True
-        event.app.exit(result=ic.get_pointed_at().value)
+    bindings.add(Keys.ControlM, eager=True)(exit_with_answer)
 
     @bindings.add(Keys.Any)
     def other(event):
