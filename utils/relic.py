@@ -202,8 +202,8 @@ class Relic:
             Choice(_("编辑角色属性权重"), value = 7,
                 description = INDENT+_("权重范围为0~1，缺损值为0")+INDENT+_("评分系统开发中...当前权重只会影响[属性着色]与[有效词条]计算")),
             Choice(_("<<取消显示隐藏的数据>>") if self.show_hidden_data else _("<<显示隐藏的数据>>"), value=-1, shortcut_key='v'),
-            Choice(_("<<清空控制台>>"), shortcut_key='c'),
-            Choice(_("<返回主菜单>"), shortcut_key='z'),
+            Choice(_("<<清空控制台>>"), shortcut_key='c', auto_enter=True),
+            Choice(_("<返回主菜单>"), shortcut_key='z', auto_enter=True),
             Separator(" "),
         ]
         while True:
@@ -246,7 +246,7 @@ class Relic:
                    description = INDENT+_("识别途中不可中断")+INDENT+_("请使游戏保持在[角色]-[遗器]-[遗器替换]界面")+INDENT+_("建议识别前手动点击[对比]提高识别度")),
             Choice(_("<<载入属性权重>>"), shortcut_key='x',
                    description=combine_styled_text(self.print_stats_weight(stats_weight), prefix="\n  启用权重:\n", indent=5) if stats_weight else None),
-            Choice(_("<返回上一级>"), shortcut_key='z'),
+            Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
             Separator(" "),
         ]
         option_0 = questionary.select(_("请选择识别的范围"), options_0, use_shortcuts=True, style=self.msg_style).ask()
@@ -332,7 +332,7 @@ class Relic:
                 Choice(_("识别当前遗器并替换"), value = 0,
                        description = INDENT+_("请使游戏保持在[角色]-[遗器]-[遗器替换]界面")+INDENT+_("建议识别前手动点击[对比]提高识别度")),
                 # 【待扩展】查询遗器数据库、推荐系统
-                Choice(_("<返回上一级>"), shortcut_key='z'),
+                Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
                 Separator(" "),
             ]
             if self.set_tag_of_speed_modified(self.relics_data[key_hash]) == 2:  
@@ -485,7 +485,7 @@ class Relic:
                 options_0.append(Choice(choice_title, value=char_name))
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
-            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
             if option_0 == "<返回上一级>":
                 return
@@ -522,7 +522,7 @@ class Relic:
                 for name in WEIGHT_STATS_NAME[st:ed]:  # 按需切片
                     # 按需显示已有数值
                     value_str = "{value:.2f}".format(value=weight[name]) if name in weight else " "
-                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name))
+                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name, auto_enter=True))
                 return choices
             while True:
                 options_1 = get_choices(0,-7) + [Separator()] + get_choices(-7) + [Separator()]
@@ -564,7 +564,7 @@ class Relic:
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
             options_0.extend([
-                Choice(_("<返回上一级>"), shortcut_key='z'),
+                Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True),
                 Separator(" ")
             ])
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
@@ -602,7 +602,7 @@ class Relic:
                 choices = []
                 for name in stats_names[st:ed]:  # 按需切片，并显示已有数值
                     value_str = "{value:.2f}{pre}".format(value=stats[name], pre=" " if name in NOT_PRE_STATS else "%") if name in stats else " "
-                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name))
+                    choices.append(Choice(str_just(name, 15) + f"{value_str:>7}", value=name, auto_enter=True))
                 return choices
             while True:
                 # 生成选择
@@ -610,7 +610,7 @@ class Relic:
                     options_2 = get_choices()
                 else:                                     # 属性面板，使属性按组别呈现
                     options_2 = get_choices(0,8) + [Separator()] + get_choices(8,15) + [Separator()] + get_choices(15,22) + [Separator()] + get_choices(22,28) + [Separator()] + get_choices(28)
-                options_2.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+                options_2.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
                 # 进行选择
                 option_2 = questionary.select(title, options_2, default=option_2, use_shortcuts=True, style=self.msg_style).ask()
                 if option_2 == _("<返回上一级>"):
@@ -676,7 +676,7 @@ class Relic:
             ]
             if not options_0:
                 options_0.append(Choice(_(" --空--"), disabled=_("请先保存角色配装")))
-            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z'))
+            options_0.append(Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True))
             option_0 = questionary.select(_("请选择角色:"), options_0, default=option_0, use_shortcuts=True, style=self.msg_style).ask()
             if option_0 == _("<返回上一级>"):
                 return
@@ -706,7 +706,7 @@ class Relic:
         # 选择队伍
         option = questionary.select(
             _("请选择对当前队伍进行遗器装备的编队："),
-            choices = self.get_team_options() + [Choice(_("<返回上一级>"), shortcut_key='z'), Separator(" ")],
+            choices = self.get_team_options() + [Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True), Separator(" ")],
             use_shortcuts=True, style=self.msg_style,
         ).ask()
         if option == _("<返回上一级>"):
@@ -1725,7 +1725,7 @@ class Relic:
 
     def ask_loadout_options(
         self, character_name: str,
-        add_options: Optional[List[Choice]] = [Choice(_("<返回上一级>"), shortcut_key='z')],
+        add_options: Optional[List[Choice]] = [Choice(_("<返回上一级>"), shortcut_key='z', auto_enter=True)],
         default_idx: Optional[int] = None,
         title: str = _("请选择配装:"),
     ) -> Union[Tuple[str, Dict[str, Union[List[str], bool]]], str]:
@@ -1749,15 +1749,15 @@ class Relic:
         loadout_len = len(options)
         if options:
             if self.loadout_detail_type == 0:
-                options.append(Choice(_("<<切换为遗器详情>>"), shortcut_key='v'))
+                options.append(Choice(_("<<切换为遗器详情>>"), shortcut_key='v', auto_enter=True))
                 options.append(
                     Choice(
-                        _("<<关闭条件效果>>") if self.activate_conditional else _("<<开启条件效果>>"), shortcut_key='x',
+                        _("<<关闭条件效果>>") if self.activate_conditional else _("<<开启条件效果>>"), shortcut_key='x', auto_enter=True,
                         description = INDENT+_("涵盖[遗器套装效果]与自定义的[角色裸装面板]中的条件效果")+INDENT+_("开启时，默认激活全部条件效果的最大效果")
                     )
                 )  # 【待扩展】自动激活达到可计算触发条件的条件效果
             else:
-                options.append(Choice(_("<<切换为面板详情>>"), shortcut_key='v'))
+                options.append(Choice(_("<<切换为面板详情>>"), shortcut_key='v', auto_enter=True))
         else:
             options.append(Separator(_("--配装记录为空--")))
         if add_options:
@@ -1818,7 +1818,7 @@ class Relic:
         choice_options = []
         for loadout_name, loadout_data in character_data:
             choice_options.append(Choice(
-                title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]), 
+                title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]),
                 value = (loadout_name, loadout_data),
                 description = self.get_loadout_detail(loadout_data["relic_hash"], character_name, 5)
             ))
