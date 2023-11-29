@@ -13,7 +13,7 @@ from utils.questionary.questionary import Choice, Separator, Style
 # import questionary   # questionary原项目更新并具备当前功能后，可进行替换
 from .relic_constants import *
 from .calculated import (calculated, Array2dict, StyledText, FloatValidator, ConflictValidator, 
-                         get_data_hash, str_just, print_styled_text, combine_styled_text)
+                         get_data_hash, str_just, str_len, print_styled_text, combine_styled_text)
 from .config import (RELIC_FILE_NAME, LOADOUT_FILE_NAME, TEAM_FILE_NAME, CHAR_PANEL_FILE_NAME, CHAR_WEIGHT_FILE_NAME, USER_DATA_DIR,
                      read_json_file, modify_json_file, rewrite_json_file, _, sra_config_obj)
 from .exceptions import Exception, RelicOCRException
@@ -1792,7 +1792,7 @@ class Relic:
         ...  # 获取互斥队伍组别信息【待扩展】
         prefix = "\n" + " " * 5
         choice_options = [Choice(
-                title = str_just(team_name, 12), 
+                title = team_name,
                 value = team_data["team_members"],
                 description = "".join(
                         prefix + str_just(char_name, 10) + " " + self.get_loadout_brief(self.loadout_data[char_name][loadout_name]["relic_hash"]) 
@@ -1814,11 +1814,13 @@ class Relic:
         """
         character_data = self.loadout_data[character_name]
         character_data = sorted(character_data.items())      # 按键名即配装名排序
+        max_len = max(str_len(name) for name, __ in character_data)
+        max_len = max_len if max_len > 8 else 8
         character_data = filter(lambda x: self.is_visible(x[1]) or self.show_hidden_data, character_data)
         choice_options = []
         for loadout_name, loadout_data in character_data:
             choice_options.append(Choice(
-                title = str_just(loadout_name, 16) + " " + self.get_loadout_brief(loadout_data["relic_hash"]),
+                title = str_just(loadout_name, max_len) + "   " + self.get_loadout_brief(loadout_data["relic_hash"]),
                 value = (loadout_name, loadout_data),
                 description = self.get_loadout_detail(loadout_data["relic_hash"], character_name, 5)
             ))
