@@ -182,31 +182,31 @@ class Relic:
         title = _("遗器模块:")
         option = None  # 保存上一次的选择
         msg = "\n"+INDENT+_("注：[角色]界面的前继可为[队伍]-[角色选择]-[详情]等界面")
+        options = [
+            Choice(_("识别遗器数据"), value = 4,
+                description = INDENT+_("支持批量识别、载入[属性权重]进行评估、导出数据\n")+INDENT+_("注：对于[速度]副属性只能做保守评估，其他属性可做准确计算")
+                +INDENT+_("  可以借助第三方工具获得[速度]副属性的精确值，")+INDENT+_("  可在[编辑角色配装]中进行辅助修改，或手动修改'relics_set.json'文件中相应的小数位，")
+                +INDENT+_("  修改后的数据会永久保存，不影响遗器哈希值，可用于后续评估")),
+            Choice(_("保存当前角色的配装"), value = 0,
+                description = INDENT+_("请使游戏保持在[角色]界面")+msg),
+            Choice(_("保存当前队伍的配装"), value = 1,
+                description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别保存")+msg),
+            Choice(_("读取当前角色的配装并装备"), value = 2,
+                description = INDENT+_("请使游戏保持在[角色]界面")+msg),
+            Choice(_("读取队伍的配装并装备"), value = 3,
+                description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别读取")+msg),
+            Choice(_("编辑角色配装"), value = 5,
+                description = INDENT+_("支持查看配装、配装重命名、替换遗器等功能")),
+            Choice(_("编辑角色裸装面板"), value = 6,
+                description = INDENT+_("此处的[角色裸装面板]是指角色卸下[遗器]、佩戴[光锥]时的角色面板")+INDENT+_("若不满足于交互界面，可在明晰构造方法的前提下直接编辑'char_panel.json'文件")),
+            Choice(_("编辑角色属性权重"), value = 7,
+                description = INDENT+_("权重范围为0~1，缺损值为0")+INDENT+_("评分系统开发中...当前权重只会影响[属性着色]与[有效词条]计算")),
+            Choice(_("<<取消显示隐藏的数据>>") if self.show_hidden_data else _("<<显示隐藏的数据>>"), value=-1, shortcut_key='v'),
+            Choice(_("<<清空控制台>>"), shortcut_key='c'),
+            Choice(_("<返回主菜单>"), shortcut_key='z'),
+            Separator(" "),
+        ]
         while True:
-            options = [
-                Choice(_("识别遗器数据"), value = 4,
-                    description = INDENT+_("支持批量识别、载入[属性权重]进行评估、导出数据\n")+INDENT+_("注：对于[速度]副属性只能做保守评估，其他属性可做准确计算")
-                    +INDENT+_("  可以借助第三方工具获得[速度]副属性的精确值，")+INDENT+_("  可在[编辑角色配装]中进行辅助修改，或手动修改'relics_set.json'文件中相应的小数位，")
-                    +INDENT+_("  修改后的数据会永久保存，不影响遗器哈希值，可用于后续评估")),
-                Choice(_("保存当前角色的配装"), value = 0,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+msg),
-                Choice(_("保存当前队伍的配装"), value = 1,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别保存")+msg),
-                Choice(_("读取当前角色的配装并装备"), value = 2,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+msg),
-                Choice(_("读取队伍的配装并装备"), value = 3,
-                    description = INDENT+_("请使游戏保持在[角色]界面")+INDENT+_("并确保目标队伍[1号位]-[角色头像]移动至列表[起始位置]")+INDENT+_("对于[混沌回忆]的队伍可以分上下半分别读取")+msg),
-                Choice(_("编辑角色配装"), value = 5,
-                    description = INDENT+_("支持查看配装、配装重命名、替换遗器等功能")),
-                Choice(_("编辑角色裸装面板"), value = 6,
-                    description = INDENT+_("此处的[角色裸装面板]是指角色卸下[遗器]、佩戴[光锥]时的角色面板")+INDENT+_("若不满足于交互界面，可在明晰构造方法的前提下直接编辑'char_panel.json'文件")),
-                Choice(_("编辑角色属性权重"), value = 7, 
-                    description = INDENT+_("权重范围为0~1，缺损值为0")+INDENT+_("评分系统开发中...当前权重只会影响[属性着色]与[有效词条]计算")),
-                Choice(_("<<取消显示隐藏的数据>>") if self.show_hidden_data else _("<<显示隐藏的数据>>"), value=-1, shortcut_key='v'),
-                Choice(_("<<清空控制台>>"), shortcut_key='c'),
-                Choice(_("<返回主菜单>"), shortcut_key='z'),
-                Separator(" "),
-            ]
             self.calculated.switch_cmd()
             option = questionary.select(title, options, default=option, use_shortcuts=True, style=self.msg_style).ask()
             if option == 0:
